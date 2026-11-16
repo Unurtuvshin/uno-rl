@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UNO replay</title>
+<style>
+:root{--felt:#14573a;--felt2:#0f4630;--ink:#f4f1e8;--mute:#b9d3c4;--panel:#0c2f21;--line:#2c6b4f;
+--R:#d9423a;--Y:#f0c020;--G:#2e9e4f;--B:#2f6fd6;--W:#222;--pos:#6fd08c;--neg:#ee7b72;--cw:64px;--ch:92px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--felt2);color:var(--ink);font:15px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline}
+h1{font-size:17px;margin:0}
+header span{color:var(--mute);font-size:13px}
+main{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;padding:14px 16px;max-width:1150px;margin:0 auto}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.table{background:radial-gradient(ellipse at center,var(--felt),var(--felt2));border:1px solid var(--line);border-radius:14px;
+position:relative;height:520px;overflow:hidden}
+.zone{position:absolute;left:0;right:0;display:flex;justify-content:center;align-items:center}
+#opp{top:14px;height:var(--ch)} #mid{top:50%;transform:translateY(-50%);gap:34px} #hand{bottom:14px;min-height:var(--ch);flex-wrap:wrap;gap:0}
+.lbl{position:absolute;left:12px;font-size:12px;color:var(--mute)}
+.card{width:var(--cw);height:var(--ch);border-radius:9px;background:var(--c,#fff);border:2px solid #fff;color:#fff;display:flex;align-items:center;
+justify-content:center;font-weight:700;font-size:24px;position:relative;box-shadow:0 2px 6px #0006;flex:none;user-select:none}
+.card.R{--c:var(--R)}.card.Y{--c:var(--Y);color:#2b2300}.card.G{--c:var(--G)}.card.B{--c:var(--B)}.card.W{--c:var(--W)}
+.card .k{position:absolute;top:4px;left:6px;font-size:12px}
+.card.back{background:repeating-linear-gradient(45deg,#7b1d1d,#7b1d1d 6px,#9c2a2a 6px,#9c2a2a 12px);color:transparent}
+.stackoverlap{margin-left:-34px} .stackoverlap:first-child{margin-left:0}
+#hand{padding-top:30px} #hand .card{margin:0 3px} #hand .card.hid{visibility:hidden}
+.card.dim{opacity:.4} .card.sel{outline:3px solid #fff;transform:translateY(-12px)}
+.qb{position:absolute;top:-27px;left:50%;transform:translateX(-50%);padding:1px 7px;border-radius:10px;font-size:12px;font-weight:700;background:#0b2a1d;border:1px solid var(--line);white-space:nowrap;z-index:2;color:#fff}
+.qb.pos{color:var(--pos)}.qb.neg{color:var(--neg)}.qb.stale{opacity:.3}.qb.pulse{animation:pulse .9s}
+@keyframes pulse{0%{transform:translateX(-50%) scale(1.7);background:#fff;color:#000}100%{transform:translateX(-50%) scale(1)}}
+.pile{position:relative}
+#opp .card{margin-left:-38px} #opp .card:first-child{margin-left:0}
+.pile{text-align:center} .pile .cap{font-size:12px;color:var(--mute);margin-top:6px}
+#disc .ring{padding:6px;border-radius:14px;border:3px solid var(--rc,#fff);display:inline-block}
+.fly{position:fixed;left:0;top:0;z-index:50;pointer-events:none}
+#banner{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:54px;font-weight:800;background:#0009;
+text-shadow:0 3px 12px #000}
+aside{display:flex;flex-direction:column;gap:12px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+.box h2{font-size:13px;margin:0 0 8px;color:var(--mute);font-weight:600;letter-spacing:.02em}
+#cap{font-size:16px;min-height:44px}
+.qrow{display:grid;grid-template-columns:118px 1fr 52px;gap:8px;align-items:center;margin:5px 0;font-size:13px}
+.qrow.sel{font-weight:700;color:#fff}.qrow:not(.sel){color:var(--mute)}
+.track{position:relative;height:14px;background:#0a2419;border-radius:3px}
+.track::before{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:#789}
+.bar{position:absolute;top:1px;bottom:1px;border-radius:2px}
+.qrow.sel .track{outline:2px solid #fff}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+#chart{width:100%;height:auto;display:block}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,select{background:#1d6b4b;color:#fff;border:1px solid var(--line);border-radius:7px;padding:6px 12px;font:inherit;cursor:pointer}
+button:hover{background:#25825c}
+input[type=range]{width:100%}
+.note{font-size:12px;color:var(--mute)}
+</style>
+</head>
+<body>
+<header><h1 id="title">UNO replay</h1><span id="sub"></span></header>
+<main>
+ <section>
+  <div class="table" id="table">
+   <div class="lbl" style="top:4px">Opponent (face down)</div>
+   <div class="zone" id="opp"></div>
+   <div class="zone" id="mid">
+     <div class="pile" id="deck"><div class="qb" id="drawb" style="display:none"></div><div class="card back"></div><div class="qb" id="passb" style="display:none;top:auto;bottom:-52px"></div><div class="cap" id="deckcap"></div></div>
+     <div class="pile" id="disc"><div class="ring"><div class="card" id="top"></div></div><div class="cap" id="discap"></div></div>
+   </div>
+   <div class="lbl" style="bottom:calc(var(--ch) + 18px)">You (the agent)</div>
+   <div class="zone" id="hand"></div>
+   <div id="banner"></div>
+  </div>
+  <div class="box" style="margin-top:12px">
+   <div class="ctl">
+     <button id="prev" title="Left arrow">&#9664; Back</button>
+     <button id="play" title="Space">&#9654; Play</button>
+     <button id="next" title="Right arrow">Step &#9654;</button>
+     <label class="note">Speed <select id="speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option></select></label>
+     <button id="restart">&#8635; Restart</button>
+   </div>
+   <input type="range" id="scrub" min="0" value="0" style="margin-top:10px">
+   <div class="note" id="stepno"></div>
+  </div>
+ </section>
+ <aside>
+  <div class="box"><h2>WHAT JUST HAPPENED</h2><div id="cap"></div></div>
+  <div class="box"><h2>LEARNED VALUE Q(s,a) OF EACH LEGAL MOVE &nbsp;(-1 = loss, +1 = win)</h2><div id="qbars"></div>
+    <div class="note" id="qnote"></div></div>
+  <div class="box"><h2>Q OF THE CHOSEN MOVE, DECISION BY DECISION</h2><svg id="chart" viewBox="0 0 300 120"></svg>
+    <div class="note">In a won game the value should climb toward +1, in a lost game fall toward -1.</div></div>
+ </aside>
+</main>
+<script>
+const DATA = /*DATA*/null;
+const E = DATA.events, M = DATA.meta;
+const VAL = ['0','1','2','3','4','5','6','7','8','9','⊘','⇄','+2','W','+4'];
+const NAME = ['0','1','2','3','4','5','6','7','8','9','Skip','Reverse','+2','Wild','+4'];
+const COL = ['R','Y','G','B'], COLNAME = {R:'red',Y:'yellow',G:'green',B:'blue'};
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const cname = c => (c[0] < 4 ? COL[c[0]] : 'W');
+const label = c => (c[0] < 4 ? COL[c[0]] : 'Wild ') + NAME[c[1]];
+let cur = 0, playing = false, busy = false, token = 0;
+
+function cardEl(c, cls) {
+  const d = document.createElement('div');
+  if (!c) { d.className = 'card back ' + (cls || ''); return d; }
+  d.className = 'card ' + cname(c) + ' ' + (cls || '');
+  d.dataset.key = c[0] + ',' + c[1];
+  d.innerHTML = '<span class="k">' + VAL[c[1]] + '</span>' + VAL[c[1]];
+  return d;
+}
+const sortHand = h => h.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+
+const shown = {};
+function badge(q, fresh, key, extra) {
+  const b = document.createElement('div');
+  b.className = 'qb ' + (q.q >= 0 ? 'pos' : 'neg') + (fresh ? '' : ' stale');
+  b.textContent = (q.q >= 0 ? '+' : '') + q.q.toFixed(2) + (extra || '');
+  if (fresh && key && shown[key] !== q.q) b.classList.add('pulse');
+  if (fresh && key) shown[key] = q.q;
+  return b;
+}
+function render(s, hideKey, qi) {
+  const hand = $('hand'); hand.innerHTML = '';
+  let hidden = false;
+  for (const c of sortHand(s.hand)) {
+    const el = cardEl(c);
+    if (hideKey && !hidden && el.dataset.key === hideKey) { el.classList.add('hid'); hidden = true; }
+    if (qi) {
+      const q = qi.d.cq[el.dataset.key];
+      if (q) {
+        el.appendChild(badge(q, qi.fresh, el.dataset.key, q.col !== null ? ' ' + COL[q.col] : ''));
+        if (qi.fresh && q.chosen) el.classList.add('sel');
+      } else if (qi.fresh) el.classList.add('dim');
+    }
+    hand.appendChild(el);
+  }
+  const db = $('drawb'), pb = $('passb');
+  db.style.display = pb.style.display = 'none';
+  if (qi) {
+    if (qi.d.drawq !== null) { db.replaceWith(Object.assign(badge({ q: qi.d.drawq }, qi.fresh, 'draw', ' draw'), { id: 'drawb' })); }
+    if (qi.d.passq !== null) { pb.replaceWith(Object.assign(badge({ q: qi.d.passq }, qi.fresh, 'pass', ' pass'), { id: 'passb' })); }
+    const nb = $('passb'); nb.style.top = 'auto'; nb.style.bottom = '-52px';
+    if (qi.d.drawq === null) $('drawb').style.display = 'none';
+    if (qi.d.passq === null) $('passb').style.display = 'none';
+  }
+  const opp = $('opp'); opp.innerHTML = '';
+  for (let k = 0; k < s.opp[0]; k++) opp.appendChild(cardEl(null));
+  const top = $('top'); const t = cardEl(s.top[1] >= 13 ? [4, s.top[1]] : s.top);   // a wild stays black; the ring shows the chosen colour
+  top.className = t.className; top.innerHTML = t.innerHTML;
+  const cn = COL[s.top[0]];
+  document.querySelector('#disc .ring').style.setProperty('--rc', getComputedStyle(document.documentElement).getPropertyValue('--' + cn));
+  $('discap').textContent = 'colour: ' + COLNAME[cn] + (s.pend ? '  |  pending draw: ' + s.pend : '');
+  $('deckcap').textContent = 'draw pile: ' + s.deck;
+  $('opp').title = 'Opponent holds ' + s.opp[0] + ' cards';
+}
+function oppCount(s){return s.opp[0];}
+
+function caption(e) {
+  const who = e.p === 0 ? 'You' : 'Opponent';
+  if (e.t === 'deal') return 'New deal. You hold ' + e.s.hand.length + ' cards, the opponent ' + e.s.opp[0] + '. Board: ' + label(e.s.top) + '.';
+  if (e.t === 'decide') return 'Your turn. The agent looks up Q for each legal move and picks the highest one (greedy).';
+  if (e.t === 'end') {
+    if (e.r === 1) return (e.why === 'limit' ? 'The opponent reached the card limit' : 'You emptied your hand') + ': WIN, reward +1.';
+    if (e.r === -1) return (e.why === 'limit' ? 'You reached the card limit' : 'The opponent emptied their hand') + ': LOSS, reward -1.';
+    return 'Draw (turn limit), reward 0.';
+  }
+  if (e.k === 'play') {
+    const wild = e.card[0] === 4;
+    return who + ' play' + (e.p === 0 ? '' : 's') + ' ' + label(e.card) + (wild ? ' and name ' + COLNAME[COL[e.color]] : '') + '.';
+  }
+  if (e.k === 'draw') {
+    const n = e.p === 0 ? e.drawn.length : e.n;
+    return who + ' draw' + (e.p === 0 ? '' : 's') + ' ' + n + ' card' + (n === 1 ? '' : 's') + (e.pend ? ' (penalty)' : '') + '.';
+  }
+  return who + ' pass' + (e.p === 0 ? '' : 'es') + '.';
+}
+
+function qpanel(k) {
+  let di = -1;
+  for (let j = k; j >= 0; j--) if (E[j].t === 'decide') { di = j; break; }
+  const box = $('qbars'); box.innerHTML = '';
+  if (di < 0) { $('qnote').textContent = 'Press Play. The bars appear on your first decision.'; return; }
+  const d = E[di];
+  const rows = d.opts.slice().sort((a, b) => b.q - a.q);
+  for (const o of rows) {
+    const r = document.createElement('div'); r.className = 'qrow' + (o.chosen ? ' sel' : '');
+    const w = Math.min(Math.abs(o.q), 1) * 50;
+    r.innerHTML = '<div>' + (o.chosen ? '▶ ' : '') + o.label + '</div><div class="track"><div class="bar" style="' +
+      (o.q >= 0 ? 'left:50%;background:var(--pos);' : 'right:50%;background:var(--neg);') + 'width:' + w + '%"></div></div>' +
+      '<div class="num">' + (o.q >= 0 ? '+' : '') + o.q.toFixed(3) + '</div>';
+    box.appendChild(r);
+  }
+  const allZero = rows.every(o => Math.abs(o.q) < 0.005);
+  $('qnote').textContent = allZero ? 'All values are close to 0: little has been learned about this situation yet (or it was rarely seen).' :
+    'Highlighted = the move the agent chose. The same numbers sit on each card in your hand (wild: best colour shown).';
+  chart(di);
+}
+function chart(di) {
+  const ds = E.map((e, j) => [e, j]).filter(x => x[0].t === 'decide');
+  const svg = $('chart'); const W = 300, H = 120, px = 24, py = 10;
+  const X = n => px + (ds.length <= 1 ? 0.5 : n / (ds.length - 1)) * (W - px - 8);
+  const Y = q => py + (1 - (q + 1) / 2) * (H - 2 * py);
+  let h = '<line x1="' + px + '" x2="' + (W - 6) + '" y1="' + Y(0) + '" y2="' + Y(0) + '" stroke="#789" stroke-dasharray="3 3"/>';
+  h += '<text x="2" y="' + (Y(1) + 4) + '" fill="#b9d3c4" font-size="9">+1</text><text x="2" y="' + (Y(0) + 3) + '" fill="#b9d3c4" font-size="9">0</text><text x="2" y="' + (Y(-1) + 3) + '" fill="#b9d3c4" font-size="9">-1</text>';
+  const pts = ds.map((x, n) => [X(n), Y(x[0].opts.find(o => o.chosen).q), x[1]]);
+  const shown = pts.filter(p => p[2] <= di);
+  h += '<polyline fill="none" stroke="#6fd08c" stroke-width="2" points="' + shown.map(p => p[0] + ',' + p[1]).join(' ') + '"/>';
+  for (const p of shown) h += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (p[2] === di ? 5 : 3) + '" fill="' + (p[2] === di ? '#fff' : '#6fd08c') + '"/>';
+  svg.innerHTML = h;
+}
+
+function rect(el) { const r = el.getBoundingClientRect(); return r; }
+async function fly(cEl, from, to, dur, delay) {
+  cEl.classList.add('fly'); document.body.appendChild(cEl);
+  const a = cEl.animate([{ transform: 'translate(' + from.x + 'px,' + from.y + 'px)' }, { transform: 'translate(' + to.x + 'px,' + to.y + 'px)' }],
+    { duration: dur, delay: delay || 0, easing: 'ease-in-out', fill: 'both' });
+  await a.finished; cEl.remove();
+}
+const pt = r => ({ x: r.left + r.width / 2 - 32, y: r.top + r.height / 2 - 46 });
+
+async function animate(e, prev) {
+  const sp = +$('speed').value, dur = 520 / sp;
+  if (e.t !== 'move') { return; }
+  const disc = pt(rect($('top'))), deck = pt(rect($('deck').firstChild));
+  if (e.k === 'play') {
+    let from;
+    if (e.p === 0) {
+      const el = [...$('hand').children].find(x => x.dataset.key === e.card[0] + ',' + e.card[1]);
+      from = el ? pt(rect(el)) : pt(rect($('hand')));
+    } else {
+      const kids = $('opp').children; from = pt(rect(kids[Math.floor(kids.length / 2)] || $('opp')));
+    }
+    if (e.p === 0) { let dj = -1; for (let j = cur; j >= 0; j--) if (E[j].t === 'decide') { dj = j; break; } render(prev, e.card[0] + ',' + e.card[1], dj >= 0 ? { d: E[dj], fresh: false } : null); }
+    await fly(cardEl(e.card), from, disc, dur);
+  } else if (e.k === 'draw') {
+    const cards = e.p === 0 ? e.drawn : Array.from({ length: Math.min(e.n, 8) }, () => null);
+    const target = e.p === 0 ? rect($('hand')) : rect($('opp'));
+    const to = pt({ left: target.left + target.width / 2 + 40, top: target.top, width: 64, height: target.height || 92 });
+    await Promise.all(cards.map((c, i) => fly(cardEl(c), deck, to, dur, i * 90 / sp)));
+  }
+}
+
+async function show(k, animateIt) {
+  const my = ++token; busy = true;
+  const e = E[k], prev = k > 0 ? E[k - 1].s : e.s;
+  if (animateIt && e.t === 'move') { await animate(e, prev); if (my !== token) return; }
+  let di = -1; for (let j = k; j >= 0; j--) if (E[j].t === 'decide') { di = j; break; }
+  render(e.s, null, di >= 0 ? { d: E[di], fresh: e.t === 'decide' } : null); $('cap').textContent = caption(e); qpanel(k);
+  $('scrub').value = k; cur = k; $('stepno').textContent = 'event ' + (k + 1) + ' of ' + E.length;
+  const b = $('banner');
+  if (e.t === 'end') { b.style.display = 'flex'; b.textContent = e.r === 1 ? 'YOU WIN' : e.r === -1 ? 'YOU LOSE' : 'DRAW'; b.style.color = e.r === 1 ? '#6fd08c' : e.r === -1 ? '#ee7b72' : '#fff'; }
+  else b.style.display = 'none';
+  busy = false;
+}
+async function loop() {
+  while (playing && cur < E.length - 1) {
+    await show(cur + 1, true);
+    const sp = +$('speed').value; const t = E[cur].t === 'decide' ? 1300 : 350;
+    await sleep(t / sp);
+  }
+  playing = false; $('play').innerHTML = cur >= E.length - 1 ? '↻ Replay' : '▶ Play';
+}
+function toggle() {
+  if (busy && !playing) return;
+  if (cur >= E.length - 1) { show(0, false).then(() => { playing = true; $('play').innerHTML = '❚❚ Pause'; loop(); }); return; }
+  playing = !playing; $('play').innerHTML = playing ? '❚❚ Pause' : '▶ Play';
+  if (playing) loop();
+}
+async function stepOnce(d) {
+  if (busy) return; playing = false; $('play').innerHTML = '▶ Play';
+  const k = cur + d; if (k < 0 || k >= E.length) return;
+  await show(k, d > 0);
+}
+$('play').onclick = toggle; $('next').onclick = () => stepOnce(1); $('prev').onclick = () => stepOnce(-1);
+$('restart').onclick = () => { token++; playing = false; $('play').innerHTML = '▶ Play'; show(0, false); };
+$('scrub').max = E.length - 1;
+$('scrub').oninput = ev => { token++; playing = false; $('play').innerHTML = '▶ Play'; show(+ev.target.value, false); };
+document.addEventListener('keydown', ev => {
+  if (ev.code === 'Space') { ev.preventDefault(); toggle(); }
+  else if (ev.code === 'ArrowRight') stepOnce(1); else if (ev.code === 'ArrowLeft') stepOnce(-1);
+});
+$('title').textContent = 'UNO replay: ' + M.algo + ' after ' + M.episodes.toLocaleString() + ' episodes';
+$('sub').textContent = 'trained vs ' + M.opp + ' | ' + M.states.toLocaleString() + ' states learned | greedy play, no learning | ' + M.rules;
+show(0, false);
+</script>
+</body>
+</html>
