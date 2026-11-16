@@ -26,8 +26,8 @@ class Abstraction:
         for x in self.ranges:
             self.n_states_max *= x
 
-    def encode(self, game):
-        hand = game.hands[0]
+    def encode(self, game, seat=0):
+        hand = game.hands[seat]
         counts = [0] * 4
         for c in hand:
             if c[0] < 4:
@@ -35,7 +35,7 @@ class Abstraction:
         order = sorted(range(self.nc), key=lambda c: (-counts[c], c))
         rank = {c: i for i, c in enumerate(order)}
         by, bits = {}, 0
-        for m in game.legal_moves(0):
+        for m in game.legal_moves(seat):
             if m[0] == "draw":
                 a = self.DRAW
             elif m[0] == "pass":
@@ -48,7 +48,7 @@ class Abstraction:
                 a = k * self.nc + rank[m[2]]
                 bits |= 1 << k
             by.setdefault(a, []).append(m)
-        n, o = len(hand), min(len(h) for i, h in enumerate(game.hands) if i != 0)
+        n, o = len(hand), min(len(h) for i, h in enumerate(game.hands) if i != seat)
         pend = 0 if not game.pend else 1 if game.pend == 2 else 2 if game.pend == 4 else 3
         if self.lim:                              # one bucket per hand size, so the 11-card danger is visible
             nb, ob = n - 1, min(o, self.lim - 1) - 1

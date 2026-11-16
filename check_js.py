@@ -14,7 +14,7 @@ from opponents import OPPONENTS
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FULL = dict(n_colors=4, numbers=tuple(range(10)), specials=("SKIP", "REV", "D2", "WILD", "D4"), hand_limit=0)
-VARIANTS = {"default": {}, "full": FULL, "no stacking, official +4": dict(stacking=(), plus4_needs_no_color=True, **FULL),
+VARIANTS = {"default": {}, "12-card limit, numbers 1-2": dict(numbers=(1, 2), hand_limit=12), "full": FULL, "no stacking, official +4": dict(stacking=(), plus4_needs_no_color=True, **FULL),
             "no draw if playable": dict(draw_even_if_playable=False)}
 
 
@@ -50,9 +50,9 @@ def play(rules, seed, opp1, start):
     while not g.done:
         legal = g.legal_moves(g.cur)
         rec = dict(seat=g.cur, legal=sorted(map(canon, legal)), order=list(map(canon, legal)))   # order: Python's set order, which the rule bot's noise follows
+        s, by = ab.encode(g, g.cur)                     # the state as seen by the seat to move, either seat
+        rec.update(state=list(s), actions=sorted(by))
         if g.cur == 0:
-            s, by = ab.encode(g)
-            rec.update(state=list(s), actions=sorted(by))
             mv = rng.choice(legal)                      # seat 0 plays randomly
         else:
             n0 = len(rng.randoms)

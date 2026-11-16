@@ -12,7 +12,7 @@ FULL = dict(n_colors=4, numbers=tuple(range(10)), specials=("SKIP", "REV", "D2",
 VARIANTS = {
     "default (team's rule sheet)": {},
     "full 108-card UNO": FULL,
-    "no hand limit": dict(hand_limit=0),
+    "12-card limit, numbers 1-2": dict(numbers=(1, 2), hand_limit=12),
     "no stacking": dict(stacking=(), **FULL),
     "official +4": dict(plus4_needs_no_color=True, **FULL),
     "no draw if playable": dict(draw_even_if_playable=False),

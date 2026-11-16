@@ -1,8 +1,8 @@
 """UNO game engine. Rules live in `Rules`; change a rule by changing a field, not the engine.
 
 Card = (color, value). color 0-3 (R,Y,G,B), 4 = wild. value 0-9 numbers, 10 skip, 11 reverse,
-12 draw2, 13 wild, 14 wild+4.  Defaults = the "current proposal" of the team's rule sheet (2 colours, numbers 1-2,
-skip/+2/+4, lose at 12 cards).  The full 108-card UNO is Rules(n_colors=4, numbers=tuple(range(10)),
+12 draw2, 13 wild, 14 wild+4.  Defaults (EXPERIMENT branch: numbers 0-9, no hand limit; main has numbers 1-2 and a 12-card limit):
+2 colours, numbers 0-9, skip/+2/+4.  The full 108-card UNO is Rules(n_colors=4, numbers=tuple(range(10)),
 specials=("SKIP","REV","D2","WILD","D4"), hand_limit=0).
 """
 from dataclasses import dataclass
@@ -16,9 +16,9 @@ class Rules:
     n_players: int = 2
     hand_size: int = 7
     n_colors: int = 2                         # colours 0..n_colors-1
-    numbers: tuple = (1, 2)                   # number cards per colour (0 would be single, others twice)
+    numbers: tuple = tuple(range(10))         # number cards per colour (0 is single, others twice)
     specials: tuple = ("SKIP", "D2", "D4")    # subset of SKIP REV D2 WILD D4 (SKIP/REV/D2: 2 per colour; WILD/D4: 4 total)
-    hand_limit: int = 12                      # reaching this many cards loses (0 = no limit); also after a penalty draw
+    hand_limit: int = 0                       # reaching this many cards loses (0 = no limit); also after a penalty draw
     plus4_needs_no_color: bool = False        # True = official: +4 only if no card of the current colour
     # (pending kind, kind played on top of it): +2 on +2, +4 on +4, +4 on +2.  () = no stacking
     stacking: tuple = (("D2", "D2"), ("D4", "D4"), ("D2", "D4"))

@@ -57,6 +57,10 @@ button,select{background:#1d6b4b;color:#fff;border:1px solid var(--line);border-
 button:hover{background:#25825c}
 input[type=range]{width:100%}
 .note{font-size:12px;color:var(--mute)}
+
+.card.playable{cursor:pointer;box-shadow:0 0 0 3px #fff8,0 2px 6px #0006}.card.playable:hover{transform:translateY(-8px)}
+#deck.clickable{cursor:pointer}#deck.clickable .card{outline:3px solid #fff}
+#hbar{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}#colorpick button{margin-right:6px}
 </style>
 </head>
 <body>
@@ -70,13 +74,14 @@ input[type=range]{width:100%}
   <label><span data-i18n="lblTrain"></span> <select id="trainopp"><option value="rule" data-i18n="optRule"></option><option value="random" data-i18n="optRandom"></option></select></label>
   <label><span data-i18n="lblVs"></span> <select id="vs"><option value="rule" data-i18n="optRule"></option><option value="random" data-i18n="optRandom"></option></select></label>
   <button id="newgame" data-i18n="play"></button>
+  <button id="humanbtn" data-i18n="humanBtn"></button>
   <span class="tally" id="tally"></span>
 </div>
 <div class="picker info" id="modelinfo"></div>
 <main>
  <section>
   <div class="table" id="table">
-   <div class="lbl" style="top:4px" data-i18n="lblOpp"></div>
+   <div class="lbl" style="top:4px" id="lblopp" data-i18n="lblOpp"></div>
    <div class="zone" id="opp"></div>
    <div class="zone" id="mid">
      <div class="pile" id="deck"><div class="qb" id="drawb" style="display:none"></div><div class="card back"></div><div class="qb" id="passb" style="display:none;top:auto;bottom:-52px"></div><div class="cap" id="deckcap"></div></div>
@@ -93,6 +98,7 @@ input[type=range]{width:100%}
      <button id="next" data-i18n="step"></button>
      <label class="note"><span data-i18n="speed"></span> <select id="speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option></select></label>
    </div>
+   <div id="hbar" style="display:none"><button id="passbtn"></button><span id="colorpick"></span><div class="note" id="hhint" style="flex-basis:100%"></div></div>
    <input type="range" id="scrub" min="0" value="0" style="margin-top:10px">
    <div class="note" id="stepno"></div>
   </div>
@@ -133,7 +139,7 @@ const I18N = {
     h2Happened: 'WHAT JUST HAPPENED', h2Q: 'LEARNED VALUE Q(s,a) OF EACH LEGAL MOVE  (-1 = loss, +1 = win)', h2Chart: 'Q OF THE CHOSEN MOVE, DECISION BY DECISION',
     chartNote: 'In a won game the value should climb toward +1, in a lost game fall toward -1.', rankNote: 'colour#1 = the colour you hold the most cards of.',
     title: (a, n) => 'UNO model player: ' + a + ', ' + n + ' episodes',
-    sub: vs => 'plays ' + (vs === 'rule' ? 'the rule-based' : 'the random') + ' bot | greedy play, no learning | rules: 2 colours, numbers 1-2, skip/+2/+4, lose at 12 cards',
+    sub: vs => 'plays ' + (vs === 'rule' ? 'the rule-based' : 'the random') + ' bot | greedy play, no learning | rules: 2 colours, numbers 0-9, skip/+2/+4, no hand limit',
     tally: (w, l, d) => 'This session: ' + w + ' won, ' + l + ' lost' + (d ? ', ' + d + ' drawn' : ''),
     info: (m, pc) => 'Measured when trained (' + m.eval_games.toLocaleString() + ' greedy test games each): wins ' + pc(m.eval.random.win) + ' vs random bot, ' + pc(m.eval.rule.win) +
       ' vs rule-based bot  |  ' + m.n_states.toLocaleString() + ' situations learned  |  trained in ' + m.secs + ' s',
@@ -151,6 +157,14 @@ const I18N = {
     qZero: 'All values are close to 0: little has been learned about this situation yet (or it was rarely seen).',
     qNote: 'Highlighted = the move the agent chose. The same numbers sit on each card in your hand (wild: best colour shown).',
     cardLabel: (c, n) => (c[0] < 4 ? n.col[c[0]] + ' ' : '') + n.card[c[1]],
+    humanBtn: '\uD83C\uDFAE Play against this model', undoTip: 'Undo your last move', passBtn: 'Pass', pickColour: 'Name a colour:',
+    lblOppModel: m => 'Opponent: ' + m + ' (face down)',
+    hTitle: (a, n) => 'You vs ' + a + ' (' + n + ' episodes)',
+    hSub: 'You play the cards. The numbers on your cards are this model\u2019s Q for each move, as if it were your coach. The model plays the other seat.',
+    hTurn: 'Your turn: click a playable card, or the draw pile to draw.', hTurnPend: n => 'A penalty of ' + n + ' cards is pending: stack a +2/+4 or draw them (click the draw pile).',
+    hTurnDrawn: 'You drew a playable card: click it to play it, or press Pass.',
+    qNoteH: 'The raised card and \u25B6 row are what the model would play. Click any playable card you prefer.',
+    htally: (w, l, d) => 'You vs the model this session: ' + w + ' won, ' + l + ' lost' + (d ? ', ' + d + ' drawn' : ''),
   },
   ja: {
     lblAlgo: '学習手法', lblEps: '学習した試合数', lblTrain: '学習相手', lblVs: '対戦相手',
@@ -160,7 +174,7 @@ const I18N = {
     h2Happened: '直前の出来事', h2Q: '選べる手ごとの学習した価値 Q(s,a)  （−1 = 負け，+1 = 勝ち）', h2Chart: '選んだ手の Q の推移',
     chartNote: '勝つ試合では +1 に向かって上がり，負ける試合では −1 に向かって下がるはずである．', rankNote: '色順位1 = 手札に最も多い色．',
     title: (a, n) => 'UNOモデルプレイヤー：' + a + '，' + n + '試合学習',
-    sub: vs => (vs === 'rule' ? 'ルールベース' : 'ランダム') + 'の相手と対戦 ｜ グリーディ（学習なし） ｜ ルール：2色，数字1と2，スキップ・+2・+4，手札12枚で負け',
+    sub: vs => (vs === 'rule' ? 'ルールベース' : 'ランダム') + 'の相手と対戦 ｜ グリーディ（学習なし） ｜ ルール：2色，数字0〜9，スキップ・+2・+4，手札の上限なし',
     tally: (w, l, d) => 'この回の成績：' + w + '勝 ' + l + '敗' + (d ? ' ' + d + '引き分け' : ''),
     info: (m, pc) => '学習直後の測定（各' + m.eval_games.toLocaleString() + '試合，グリーディ）：対ランダム ' + pc(m.eval.random.win) + '，対ルールベース ' + pc(m.eval.rule.win) +
       ' ｜ 学習した状況 ' + m.n_states.toLocaleString() + '個 ｜ 学習時間 ' + m.secs + '秒',
@@ -178,6 +192,14 @@ const I18N = {
     qZero: 'どの値も 0 に近い：この場面はまだほとんど学習していない（またはほとんど出会っていない）．',
     qNote: '強調表示が選んだ手．同じ値が手札の各カードにも付いている（ワイルドは最良の色）．',
     cardLabel: (c, n) => (c[0] < 4 ? n.col[c[0]] + 'の' : '') + n.card[c[1]],
+    humanBtn: '\uD83C\uDFAE このモデルと対戦する', undoTip: '直前の自分の手を取り消す', passBtn: 'パス', pickColour: '色を指定：',
+    lblOppModel: m => '相手：' + m + '（裏向き）',
+    hTitle: (a, n) => 'あなた 対 ' + a + '（' + n + '試合学習）',
+    hSub: 'あなたがカードを選ぶ．手札の数字は，このモデルがコーチだったときの各手の Q である．モデルは相手の席で打つ．',
+    hTurn: 'あなたの番：出せるカードをクリックするか，山札をクリックして引く．', hTurnPend: n => 'ペナルティ' + n + '枚が待っている：+2/+4 を重ねるか，山札をクリックして全部引く．',
+    hTurnDrawn: '出せるカードを引いた：クリックして出すか，パスを押す．',
+    qNoteH: '持ち上がったカードと \u25B6 の行がモデルなら選ぶ手である．好きな出せるカードをクリックしてよい．',
+    htally: (w, l, d) => 'このモデルとの対戦成績：' + w + '勝 ' + l + '敗' + (d ? ' ' + d + '引き分け' : ''),
   },
 };
 let LANG = 'en';
@@ -193,7 +215,7 @@ function qlabel(s) {                       // action names come from the engine 
   const m = /^(\w+) \(colour#(\d+)\)$/.exec(s);
   return m ? NM().kind[m[1]] + '（色順位' + m[2] + '）' : s;
 }
-let cur = 0, playing = false, busy = false, token = 0;
+let cur = 0, playing = false, busy = false, token = 0, mode = 'replay', H = null;
 function setPlayLabel() { $('play').textContent = playing ? tr('btnPause') : (E.length > 1 && cur >= E.length - 1 ? tr('btnReplay') : tr('btnPlay')); }
 
 function cardEl(c, cls) {
@@ -267,9 +289,12 @@ function caption(e) {
 function qpanel(k) {
   let di = -1;
   for (let j = k; j >= 0; j--) if (E[j].t === 'decide') { di = j; break; }
+  if (di < 0) { $('qbars').innerHTML = ''; $('qnote').textContent = tr('qStart'); drawChart([], -1); return; }
+  const ds = E.filter(e => e.t === 'decide');
+  qshow(E[di], ds.map(x => x.opts.find(o => o.chosen).q), ds.indexOf(E[di]));
+}
+function qshow(d, vals, hi) {
   const box = $('qbars'); box.innerHTML = '';
-  if (di < 0) { $('qnote').textContent = tr('qStart'); return; }
-  const d = E[di];
   const rows = d.opts.slice().sort((a, b) => b.q - a.q);
   for (const o of rows) {
     const r = document.createElement('div'); r.className = 'qrow' + (o.chosen ? ' sel' : '');
@@ -280,20 +305,18 @@ function qpanel(k) {
     box.appendChild(r);
   }
   const allZero = rows.every(o => Math.abs(o.q) < 0.005);
-  $('qnote').textContent = tr(allZero ? 'qZero' : 'qNote');
-  chart(di);
+  $('qnote').textContent = tr(allZero ? 'qZero' : (mode === 'human' ? 'qNoteH' : 'qNote'));
+  drawChart(vals, hi);
 }
-function chart(di) {
-  const ds = E.map((e, j) => [e, j]).filter(x => x[0].t === 'decide');
+function drawChart(vals, hi) {               // vals: chosen Q per decision; points up to index hi are drawn
   const svg = $('chart'); const W = 300, H = 120, px = 24, py = 10;
-  const X = n => px + (ds.length <= 1 ? 0.5 : n / (ds.length - 1)) * (W - px - 8);
+  const X = n => px + (vals.length <= 1 ? 0.5 : n / (vals.length - 1)) * (W - px - 8);
   const Y = q => py + (1 - (q + 1) / 2) * (H - 2 * py);
   let h = '<line x1="' + px + '" x2="' + (W - 6) + '" y1="' + Y(0) + '" y2="' + Y(0) + '" stroke="#789" stroke-dasharray="3 3"/>';
   h += '<text x="2" y="' + (Y(1) + 4) + '" fill="#b9d3c4" font-size="9">+1</text><text x="2" y="' + (Y(0) + 3) + '" fill="#b9d3c4" font-size="9">0</text><text x="2" y="' + (Y(-1) + 3) + '" fill="#b9d3c4" font-size="9">-1</text>';
-  const pts = ds.map((x, n) => [X(n), Y(x[0].opts.find(o => o.chosen).q), x[1]]);
-  const shownPts = pts.filter(p => p[2] <= di);
-  h += '<polyline fill="none" stroke="#6fd08c" stroke-width="2" points="' + shownPts.map(p => p[0] + ',' + p[1]).join(' ') + '"/>';
-  for (const p of shownPts) h += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (p[2] === di ? 5 : 3) + '" fill="' + (p[2] === di ? '#fff' : '#6fd08c') + '"/>';
+  const pts = vals.map((q, n) => [X(n), Y(q), n]).filter(p => p[2] <= hi);
+  h += '<polyline fill="none" stroke="#6fd08c" stroke-width="2" points="' + pts.map(p => p[0] + ',' + p[1]).join(' ') + '"/>';
+  for (const p of pts) h += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (p[2] === hi ? 5 : 3) + '" fill="' + (p[2] === hi ? '#fff' : '#6fd08c') + '"/>';
   svg.innerHTML = h;
 }
 
@@ -306,10 +329,10 @@ async function fly(cEl, from, to, dur, delay) {
 }
 const pt = r => ({ x: r.left + r.width / 2 - 32, y: r.top + r.height / 2 - 46 });
 
-async function animate(e, prev) {
+async function animate(e, prev, qiPrev) {
   const sp = +$('speed').value, dur = 520 / sp;
   if (e.t !== 'move') { return; }
-  const disc = pt(rect($('top'))), deck = pt(rect($('deck').firstChild));
+  const disc = pt(rect($('top'))), deck = pt(rect($('deck').querySelector('.card')));
   if (e.k === 'play') {
     let from;
     if (e.p === 0) {
@@ -318,7 +341,7 @@ async function animate(e, prev) {
     } else {
       const kids = $('opp').children; from = pt(rect(kids[Math.floor(kids.length / 2)] || $('opp')));
     }
-    if (e.p === 0) { let dj = -1; for (let j = cur; j >= 0; j--) if (E[j].t === 'decide') { dj = j; break; } render(prev, e.card[0] + ',' + e.card[1], dj >= 0 ? { d: E[dj], fresh: false } : null); }
+    if (e.p === 0) render(prev, e.card[0] + ',' + e.card[1], qiPrev);
     await fly(cardEl(e.card), from, disc, dur);
   } else if (e.k === 'draw') {
     const cards = e.p === 0 ? e.drawn : Array.from({ length: Math.min(e.n, 8) }, () => null);
@@ -341,7 +364,10 @@ function paint(k) {                         // draw event k in the current langu
 async function show(k, animateIt) {
   const my = ++token; busy = true;
   const e = E[k], prev = k > 0 ? E[k - 1].s : e.s;
-  if (animateIt && e.t === 'move') { await animate(e, prev); if (my !== token) return; }
+  if (animateIt && e.t === 'move') {
+    let dj = -1; for (let j = cur; j >= 0; j--) if (E[j].t === 'decide') { dj = j; break; }
+    await animate(e, prev, dj >= 0 ? { d: E[dj], fresh: false } : null); if (my !== token) return;
+  }
   cur = k; $('scrub').value = k;
   paint(k);
   if (e.t === 'end' && !counted) { counted = true; if (e.r === 1) tally.w++; else if (e.r === -1) tally.l++; else tally.d++; updTally(); }
@@ -366,10 +392,11 @@ async function stepOnce(d) {
   const k = cur + d; if (k < 0 || k >= E.length) return;
   await show(k, d > 0);
 }
-$('play').onclick = toggle; $('next').onclick = () => stepOnce(1); $('prev').onclick = () => stepOnce(-1);
+$('play').onclick = toggle; $('next').onclick = () => stepOnce(1); $('prev').onclick = () => (mode === 'human' ? hUndo() : stepOnce(-1));
 $('scrub').oninput = ev => { token++; playing = false; setPlayLabel(); show(+ev.target.value, false); };
 document.addEventListener('keydown', ev => {
   if (ev.target && ev.target.tagName === 'SELECT') return;
+  if (mode === 'human') { if (ev.code === 'ArrowLeft') hUndo(); return; }
   if (ev.code === 'Space') { ev.preventDefault(); toggle(); }
   else if (ev.code === 'ArrowRight') stepOnce(1); else if (ev.code === 'ArrowLeft') stepOnce(-1);
 });
@@ -388,22 +415,24 @@ function showInfo() {
   const m = MODELS[modelId()]; if (!m) { $('modelinfo').textContent = tr('noModel'); return; }
   $('modelinfo').textContent = tr('info', m, x => (100 * x).toFixed(1) + '%');
 }
-function updTally() { $('tally').textContent = tr('tally', tally.w, tally.l, tally.d); }
+const ht = { w: 0, l: 0, d: 0 };
+function updTally() { $('tally').textContent = mode === 'human' ? tr('htally', ht.w, ht.l, ht.d) : tr('tally', tally.w, tally.l, tally.d); }
 function setTitles() {
   const a = $('algo').value || algos[0], n = +$('eps').value;
-  $('title').textContent = tr('title', ALGO[LANG][a], n.toLocaleString());
-  $('sub').textContent = tr('sub', $('vs').value);
+  $('title').textContent = tr(mode === 'human' ? 'hTitle' : 'title', ALGO[LANG][a], n.toLocaleString());
+  $('sub').textContent = mode === 'human' ? tr('hSub') : tr('sub', $('vs').value);
   document.title = LANG === 'ja' ? 'UNOモデルプレイヤー' : 'UNO model player';
 }
 function applyLang() {
   document.documentElement.lang = LANG; $('lang').value = LANG;
   document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = tr(el.dataset.i18n); });
   [...$('algo').options].forEach(o => { o.textContent = ALGO[LANG][o.value] || o.value; });
-  setTitles(); showInfo(); updTally(); setPlayLabel();
-  if (!busy) paint(cur);
+  setTitles(); showInfo(); updTally(); setPlayLabel(); setModeUI();
+  if (mode === 'human') { if (H && !H.anim) hRefresh(); } else if (!busy) paint(cur);
 }
 function newGame() {
   const model = getModel(); showInfo(); if (!model) return;
+  mode = 'replay'; H = null; setModeUI(); updTally();
   token++; playing = false; setPlayLabel();
   for (const k in shown) delete shown[k];
   gameNo++; counted = false;
@@ -413,8 +442,146 @@ function newGame() {
   setTitles();
   cur = 0; show(0, false).then(() => { playing = true; setPlayLabel(); loop(); });
 }
-['algo', 'eps', 'trainopp', 'vs'].forEach(id => { $(id).onchange = newGame; });
+['algo', 'eps', 'trainopp', 'vs'].forEach(id => { $(id).onchange = () => (mode === 'human' ? startHuman() : newGame()); });
+$('humanbtn').onclick = () => startHuman();
 $('newgame').onclick = newGame;
+
+// ---------------- you vs the model ----------------
+function setModeUI() {
+  const h = mode === 'human';
+  for (const id of ['play', 'next', 'scrub', 'stepno']) $(id).style.display = h ? 'none' : '';
+  $('hbar').style.display = h ? '' : 'none';
+  $('vs').parentElement.style.display = h ? 'none' : '';
+  $('prev').title = h ? tr('undoTip') : '';
+  $('passbtn').textContent = tr('passBtn');
+  $('lblopp').textContent = h ? tr('lblOppModel', ALGO[LANG][$('algo').value]) : tr('lblOpp');
+  if (!h) { $('deck').classList.remove('clickable'); $('deck').onclick = null; }
+}
+const hSnap = g => ({ hand: g.hands[0].map(c => [...c]), opp: g.hands.slice(1).map(h => h.length), top: [g.top_color, g.top_value], pend: g.pend, deck: g.deck.length });
+function hObserve(gg, p, mv) {               // same event shapes as recordGame, so animate() and caption() are reused
+  const e = { t: 'move', p, k: mv[0], pend: 0, s: hSnap(gg) };
+  if (mv[0] === 'play') { e.card = [...mv[1]]; e.color = mv[2]; }
+  else if (mv[0] === 'draw') {
+    const before = new Map(); for (const c of H.hands[p]) before.set(UnoEngine.key(c), (before.get(UnoEngine.key(c)) || 0) + 1);
+    const drawn = [];
+    for (const c of gg.hands[p]) { const k = UnoEngine.key(c), n = before.get(k) || 0; if (n > 0) before.set(k, n - 1); else drawn.push([...c]); }
+    e.drawn = drawn; e.n = drawn.length; e.pend = H.prevPend ? 1 : 0;
+  }
+  H.events.push(e); H.hands = gg.hands.map(h => h.map(c => [...c])); H.prevPend = gg.pend;
+}
+function hModelMoves() {                     // the model plays every turn that is not the human's
+  const g = H.g;
+  while (!g.done && g.cur !== 0) {
+    const { state, by } = H.ab.encode(g, g.cur), a = H.model.greedy(state, [...by.keys()], H.rng);
+    g.apply(H.rng.choice(by.get(a)));
+  }
+}
+function startHuman() {
+  const model = getModel(); showInfo(); if (!model) return;
+  token++; playing = false; mode = 'human';
+  const rules = UnoEngine.DEFAULT_RULES, rng = new UnoEngine.Rng((Math.random() * 4294967296) >>> 0);
+  gameNo++;
+  const g = new UnoEngine.Game(rules, rng, gameNo % rules.n_players);
+  H = { g, rng, model, ab: new UnoEngine.Abstraction(rules), undo: [], qs: [], over: false, anim: true, events: [], dec: null, result: null };
+  H.hands = g.hands.map(h => h.map(c => [...c])); H.prevPend = 0; H.lastSnap = hSnap(g);
+  g.observer = hObserve;
+  for (const k in shown) delete shown[k];
+  $('banner').style.display = 'none';
+  setModeUI(); setTitles(); updTally();
+  render(H.lastSnap, null, null); $('cap').textContent = caption({ t: 'deal', s: H.lastSnap });
+  hAfterMove(H);
+}
+async function hPlayEvents(h0) {
+  const evs = h0.events; h0.events = [];
+  for (const e of evs) {
+    await animate(e, h0.lastSnap, null); if (H !== h0) return false;
+    render(e.s, null, null); $('cap').textContent = caption(e); h0.lastSnap = e.s;
+    await sleep((e.p === 0 ? 250 : 500) / +$('speed').value); if (H !== h0) return false;
+  }
+  return true;
+}
+async function hAfterMove(h0) {              // the model answers (if it is its turn), then it is the human's decision or the game is over
+  h0.anim = true; hClear();
+  hModelMoves();
+  if (!(await hPlayEvents(h0))) return;
+  h0.anim = false;
+  if (h0.g.done) hFinish(); else hDecision();
+}
+function hClear() {
+  $('hand').querySelectorAll('.playable').forEach(el => { el.onclick = null; });
+  $('deck').classList.remove('clickable'); $('deck').onclick = null;
+  $('passbtn').style.display = 'none'; $('colorpick').innerHTML = ''; $('hhint').textContent = '';
+}
+function hDecision() {
+  const g = H.g, ab = H.ab, { state, by } = ab.encode(g, 0), row = H.model.q(state), legalA = [...by.keys()];
+  let best = legalA[0]; for (const a of legalA) if (row[a] > row[best] + 1e-12) best = a;     // what the model would play
+  const cq = {}, moveQ = {};
+  for (const a of legalA) for (const m of by.get(a)) {
+    if (m[0] === 'play') {
+      const k = m[1][0] + ',' + m[1][1];
+      if (!(k in cq) || row[a] > cq[k].q) cq[k] = { q: row[a], label: ab.actionName(a), col: m[1][0] === 4 ? m[2] : null, chosen: a === best };
+    }
+    moveQ[JSON.stringify(m)] = row[a];
+  }
+  const d = { s: hSnap(g), opts: legalA.map(a => ({ label: ab.actionName(a), q: row[a], chosen: a === best })), cq,
+    drawq: legalA.includes(ab.DRAW) ? row[ab.DRAW] : null, passq: legalA.includes(ab.PASS) ? row[ab.PASS] : null };
+  H.dec = { d, moveQ, legal: g.legal_moves(0) };
+  render(d.s, null, { d, fresh: true });
+  hClear();
+  for (const el of $('hand').children) {
+    if (!(el.dataset.key in cq)) continue;
+    el.classList.add('playable'); el.onclick = () => hClickCard(el.dataset.key.split(',').map(Number));
+  }
+  if (d.drawq !== null) { $('deck').classList.add('clickable'); $('deck').onclick = () => hDo(['draw']); }
+  if (d.passq !== null) { $('passbtn').style.display = ''; $('passbtn').onclick = () => hDo(['pass']); }
+  $('hhint').textContent = g.pend ? tr('hTurnPend', g.pend) : g.drawn !== null ? tr('hTurnDrawn') : tr('hTurn');
+  qshow(d, H.qs, H.qs.length - 1);
+}
+function hClickCard(card) {
+  const moves = H.dec.legal.filter(m => m[0] === 'play' && m[1][0] === card[0] && m[1][1] === card[1]);
+  if (moves.length === 1) return hDo(moves[0]);
+  const box = $('colorpick'); box.innerHTML = '<span class="note">' + tr('pickColour') + '</span> ';   // a +4: name the next colour
+  for (const m of moves) {
+    const b = document.createElement('button'), q = H.dec.moveQ[JSON.stringify(m)];
+    b.textContent = colName(m[2]) + ' ' + (q >= 0 ? '+' : '') + q.toFixed(2); b.onclick = () => hDo(m); box.appendChild(b);
+  }
+}
+async function hDo(mv) {
+  const h0 = H; if (!h0 || h0.anim || h0.over) return;
+  h0.anim = true;
+  h0.undo.push({ snap: h0.g.snapshot(h0.rng), nq: h0.qs.length });
+  h0.qs.push(h0.dec.moveQ[JSON.stringify(mv)]);
+  hClear(); h0.events = [];
+  h0.g.apply(mv);
+  hAfterMove(h0);
+}
+function hFinish() {
+  const g = H.g; H.over = true;
+  const r = g.winner === null ? 0 : g.winner === 0 ? 1 : -1, why = g.winner === null ? 'draw' : !g.hands[g.winner].length ? 'emptied' : 'limit';
+  H.result = r === 1 ? 'w' : r === -1 ? 'l' : 'd'; ht[H.result]++; updTally();
+  const b = $('banner'); b.style.display = 'flex'; b.textContent = tr(r === 1 ? 'bannerWin' : r === -1 ? 'bannerLose' : 'bannerDraw');
+  b.style.color = r === 1 ? '#6fd08c' : r === -1 ? '#ee7b72' : '#fff';
+  $('cap').textContent = caption({ t: 'end', r, why });
+  if (H.dec) qshow(H.dec.d, H.qs, H.qs.length - 1);
+}
+function hUndo() {
+  if (mode !== 'human' || !H || H.anim || !H.undo.length) return;
+  const u = H.undo.pop();
+  if (H.over) { ht[H.result]--; H.over = false; H.result = null; updTally(); $('banner').style.display = 'none'; }
+  H.g.restore(u.snap, H.rng); H.qs.length = u.nq;
+  H.hands = H.g.hands.map(h => h.map(c => [...c])); H.prevPend = H.g.pend; H.events = []; H.lastSnap = hSnap(H.g);
+  $('cap').textContent = '';
+  hDecision();
+}
+function hRefresh() {                        // after a language change: redraw the current human decision or the final screen
+  if (!H) return;
+  if (H.over) { const r = H.result; hFinishView(r); } else if (H.dec) hDecision();
+}
+function hFinishView(r) {
+  const g = H.g, why = g.winner === null ? 'draw' : !g.hands[g.winner].length ? 'emptied' : 'limit';
+  const b = $('banner'); b.style.display = 'flex'; b.textContent = tr(r === 'w' ? 'bannerWin' : r === 'l' ? 'bannerLose' : 'bannerDraw');
+  $('cap').textContent = caption({ t: 'end', r: r === 'w' ? 1 : r === 'l' ? -1 : 0, why });
+}
 $('lang').onchange = ev => { LANG = ev.target.value; try { localStorage.setItem('uno-lang', LANG); } catch (e) {} applyLang(); };
 applyLang(); newGame();
 </script>
