@@ -323,9 +323,11 @@ function drawChart(vals, hi) {               // vals: chosen Q per decision; poi
 function rect(el) { const r = el.getBoundingClientRect(); return r; }
 async function fly(cEl, from, to, dur, delay) {
   cEl.classList.add('fly'); document.body.appendChild(cEl);
-  const a = cEl.animate([{ transform: 'translate(' + from.x + 'px,' + from.y + 'px)' }, { transform: 'translate(' + to.x + 'px,' + to.y + 'px)' }],
-    { duration: dur, delay: delay || 0, easing: 'ease-in-out', fill: 'both' });
-  await a.finished; cEl.remove();
+  try {
+    const a = cEl.animate([{ transform: 'translate(' + from.x + 'px,' + from.y + 'px)' }, { transform: 'translate(' + to.x + 'px,' + to.y + 'px)' }],
+      { duration: dur, delay: delay || 0, easing: 'ease-in-out', fill: 'both' });
+    await a.finished;
+  } catch (e) { /* a cancelled animation must not leave the card stuck on screen */ } finally { cEl.remove(); }
 }
 const pt = r => ({ x: r.left + r.width / 2 - 32, y: r.top + r.height / 2 - 46 });
 
@@ -373,27 +375,30 @@ async function show(k, animateIt) {
   if (e.t === 'end' && !counted) { counted = true; if (e.r === 1) tally.w++; else if (e.r === -1) tally.l++; else tally.d++; updTally(); }
   busy = false;
 }
+let loopId = 0;                              // only the newest loop may keep stepping (an old one would replay the same events)
 async function loop() {
-  while (playing && cur < E.length - 1) {
+  const my = ++loopId;
+  while (playing && my === loopId && cur < E.length - 1) {
     await show(cur + 1, true);
+    if (my !== loopId) return;
     const sp = +$('speed').value; const t = E[cur].t === 'decide' ? 1300 : 350;
     await sleep(t / sp);
   }
-  playing = false; setPlayLabel();
+  if (my === loopId) { playing = false; setPlayLabel(); }
 }
 function toggle() {
   if (busy && !playing) return;
   if (cur >= E.length - 1) { show(0, false).then(() => { playing = true; setPlayLabel(); loop(); }); return; }
   playing = !playing; setPlayLabel();
-  if (playing) loop();
+  if (playing) loop(); else loopId++;
 }
 async function stepOnce(d) {
-  if (busy) return; playing = false; setPlayLabel();
+  if (busy) return; playing = false; loopId++; setPlayLabel();
   const k = cur + d; if (k < 0 || k >= E.length) return;
   await show(k, d > 0);
 }
 $('play').onclick = toggle; $('next').onclick = () => stepOnce(1); $('prev').onclick = () => (mode === 'human' ? hUndo() : stepOnce(-1));
-$('scrub').oninput = ev => { token++; playing = false; setPlayLabel(); show(+ev.target.value, false); };
+$('scrub').oninput = ev => { token++; playing = false; loopId++; setPlayLabel(); show(+ev.target.value, false); };
 document.addEventListener('keydown', ev => {
   if (ev.target && ev.target.tagName === 'SELECT') return;
   if (mode === 'human') { if (ev.code === 'ArrowLeft') hUndo(); return; }
@@ -433,7 +438,7 @@ function applyLang() {
 function newGame() {
   const model = getModel(); showInfo(); if (!model) return;
   mode = 'replay'; H = null; setModeUI(); updTally();
-  token++; playing = false; setPlayLabel();
+  token++; playing = false; loopId++; setPlayLabel();
   for (const k in shown) delete shown[k];
   gameNo++; counted = false;
   E = UnoEngine.recordGame(model, $('vs').value, (Math.random() * 4294967296) >>> 0, UnoEngine.DEFAULT_RULES, gameNo);
@@ -478,7 +483,7 @@ function hModelMoves() {                     // the model plays every turn that 
 }
 function startHuman() {
   const model = getModel(); showInfo(); if (!model) return;
-  token++; playing = false; mode = 'human';
+  token++; playing = false; loopId++; mode = 'human';
   const rules = UnoEngine.DEFAULT_RULES, rng = new UnoEngine.Rng((Math.random() * 4294967296) >>> 0);
   gameNo++;
   const g = new UnoEngine.Game(rules, rng, gameNo % rules.n_players);
