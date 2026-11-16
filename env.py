@@ -84,12 +84,15 @@ class UnoEnv:
         return s, list(self.moves)
 
     def reset(self):
-        self.game = Game(self.rules, self.rng, start=self.games % self.rules.n_players)  # alternate who starts
-        self.games += 1
-        self.game.observer = self.observer
-        if self.observer:
-            self.observer(self.game, None, None)      # the deal
-        self._to_agent()
+        while True:
+            self.game = Game(self.rules, self.rng, start=self.games % self.rules.n_players)  # alternate who starts
+            self.games += 1
+            self.game.observer = self.observer
+            if self.observer:
+                self.observer(self.game, None, None)      # the deal
+            self._to_agent()
+            if not self.game.done:                        # else the opponent won before the agent ever moved (a long
+                break                                     # run of Skips): nothing to learn from it, deal again
         return self._obs()
 
     def step(self, a):

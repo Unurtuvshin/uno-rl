@@ -346,11 +346,10 @@ class Model {
 function recordGame(model, oppName, seed, rules, gameNo) {
   rules = rules || DEFAULT_RULES;
   const rng = new Rng(seed), ab = new Abstraction(rules), opp = OPPONENTS[oppName];
-  const g = new Game(rules, rng, (gameNo || 0) % rules.n_players);
-  const ev = []; let hands = null, prevPend = 0;
+  let g = null, ev = [], hands = null, prevPend = 0;
   const snap = () => ({ hand: g.hands[0].map(c => [...c]), opp: g.hands.slice(1).map(h => h.length), top: [g.top_color, g.top_value], pend: g.pend, deck: g.deck.length });
   const counter = h => { const m = new Map(); for (const c of h) m.set(key(c), (m.get(key(c)) || 0) + 1); return m; };
-  g.observer = (gg, p, mv) => {
+  const observer = (gg, p, mv) => {
     const e = { t: 'move', p, k: mv[0], pend: 0, s: snap() };
     if (mv[0] === 'play') { e.card = [...mv[1]]; e.color = mv[2]; }
     else if (mv[0] === 'draw') {
@@ -360,9 +359,13 @@ function recordGame(model, oppName, seed, rules, gameNo) {
     }
     ev.push(e); hands = gg.hands.map(h => h.map(c => [...c])); prevPend = gg.pend;
   };
-  ev.push({ t: 'deal', s: snap() }); hands = g.hands.map(h => h.map(c => [...c]));
   const toAgent = () => { while (!g.done && g.cur !== 0) g.apply(opp(g, g.cur, g.legal_moves(g.cur), rng)); };
-  toAgent();
+  for (let attempt = 0; ; attempt++) {         // a game the opponent wins before the agent ever moves is dealt again, as UnoEnv.reset does
+    g = new Game(rules, rng, ((gameNo || 0) + attempt) % rules.n_players); ev = []; prevPend = 0; g.observer = observer;
+    ev.push({ t: 'deal', s: snap() }); hands = g.hands.map(h => h.map(c => [...c]));
+    toAgent();
+    if (!g.done) break;
+  }
   while (!g.done) {
     const { state, by } = ab.encode(g), legal = [...by.keys()];
     const row = model.q(state), act = model.greedy(state, legal, rng);
@@ -387,15 +390,17 @@ function simulate(model, oppName, n, seed, rules) {
   rules = rules || DEFAULT_RULES;
   const rng = new Rng(seed), ab = new Abstraction(rules), opp = OPPONENTS[oppName];
   let w = 0, l = 0;
-  for (let i = 0; i < n; i++) {
-    const g = new Game(rules, rng, i % rules.n_players);
+  for (let i = 0, dealt = 0; i < n;) {
+    const g = new Game(rules, rng, dealt++ % rules.n_players);
     const toAgent = () => { while (!g.done && g.cur !== 0) g.apply(opp(g, g.cur, g.legal_moves(g.cur), rng)); };
     toAgent();
+    if (g.done) continue;                        // the opponent won before the agent moved: deal again (as UnoEnv.reset)
     while (!g.done) {
       const { state, by } = ab.encode(g), act = model.greedy(state, [...by.keys()], rng);
       g.apply(rng.choice(by.get(act))); toAgent();
     }
     if (g.winner === 0) w++; else if (g.winner !== null) l++;
+    i++;
   }
   return { win: w / n, loss: l / n, draw: 1 - (w + l) / n };
 }
