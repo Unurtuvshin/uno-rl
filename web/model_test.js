@@ -3,7 +3,7 @@ const fs = require('fs'), path = require('path'), E = require('./engine.js');
 global.atob = s => Buffer.from(s, 'base64').toString('binary');
 const dir = path.join(__dirname, '..', 'models');
 let worst = 0, n = 0, bad = 0;
-const N = 3000;
+const N = +process.argv[2] || 3000;
 for (const f of fs.readdirSync(dir).filter(x => x.endsWith('.json'))) {
   const m = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')), model = new E.Model(m);
   for (const opp of ['random', 'rule']) {
