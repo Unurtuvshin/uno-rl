@@ -47,6 +47,17 @@ class Game {
     this.pend = 0; this.pend_kind = null; this.drawn = null;
     this.turns = 0; this.done = false; this.winner = null; this.observer = null;
   }
+  snapshot(rng) {                              // everything needed to undo back to this moment
+    return { deck: this.deck.map(c => [...c]), discard: this.discard.map(c => [...c]), hands: this.hands.map(h => h.map(c => [...c])),
+      top_color: this.top_color, top_value: this.top_value, dir: this.dir, cur: this.cur, pend: this.pend, pend_kind: this.pend_kind,
+      drawn: this.drawn ? [...this.drawn] : null, turns: this.turns, done: this.done, winner: this.winner, rngS: rng ? rng.s : null };
+  }
+  restore(sn, rng) {
+    this.deck = sn.deck.map(c => [...c]); this.discard = sn.discard.map(c => [...c]); this.hands = sn.hands.map(h => h.map(c => [...c]));
+    for (const k of ['top_color', 'top_value', 'dir', 'cur', 'pend', 'pend_kind', 'turns', 'done', 'winner']) this[k] = sn[k];
+    this.drawn = sn.drawn ? [...sn.drawn] : null;
+    if (rng && sn.rngS !== null) rng.s = sn.rngS;
+  }
   total_cards() { return this.deck.length + this.discard.length + this.hands.reduce((s, h) => s + h.length, 0); }
   _advance(steps) { this.cur = (((this.cur + this.dir * (steps || 1)) % this.rules.n_players) + this.rules.n_players) % this.rules.n_players; this.drawn = null; }
   _draw(p, k) {
@@ -161,14 +172,15 @@ class Abstraction {
     this.DRAW = this.kinds.length * this.nc; this.PASS = this.DRAW + 1; this.nActions = this.PASS + 1;
     this.ranges = [this.lim ? this.lim - 1 : 5, this.lim ? this.lim - 1 : 4, this.nc, 4, 2, 2 ** this.kinds.length];
   }
-  encode(g) {
-    const hand = g.hands[0], nc = this.nc;
+  encode(g, seat) {                           // the state as seen by `seat` (default 0 = the agent); the game is symmetric
+    seat = seat || 0;
+    const hand = g.hands[seat], nc = this.nc;
     const counts = [0, 0, 0, 0];
     for (const c of hand) if (c[0] < 4) counts[c[0]]++;
     const order = [...Array(nc).keys()].sort((a, b) => (counts[b] - counts[a]) || (a - b));
     const rank = {}; order.forEach((c, i) => { rank[c] = i; });
     const by = new Map(); let bits = 0;
-    for (const m of g.legal_moves(0)) {
+    for (const m of g.legal_moves(seat)) {
       let a;
       if (m[0] === 'draw') a = this.DRAW; else if (m[0] === 'pass') a = this.PASS;
       else {
@@ -180,7 +192,7 @@ class Abstraction {
       if (!by.has(a)) by.set(a, []);
       by.get(a).push(m);
     }
-    const n = hand.length, o = Math.min(...g.hands.filter((_, i) => i !== 0).map(h => h.length));
+    const n = hand.length, o = Math.min(...g.hands.filter((_, i) => i !== seat).map(h => h.length));
     const pend = !g.pend ? 0 : g.pend === 2 ? 1 : g.pend === 4 ? 2 : 3;
     let nb, ob;
     if (this.lim) { nb = n - 1; ob = Math.min(o, this.lim - 1) - 1; }

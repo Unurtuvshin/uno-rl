@@ -18,12 +18,13 @@ for (const [ci, c] of cases.entries()) {
     const legal = g.legal_moves(g.cur).map(canon).sort();
     if (g.cur !== st.seat) { fail(`${tag} step ${si}: seat ${g.cur} vs ${st.seat}`); break; }
     if (JSON.stringify(legal) !== JSON.stringify(st.legal)) { fail(`${tag} step ${si}: legal moves\n js ${legal}\n py ${st.legal}`); break; }
-    if (st.seat === 0) {
-      const { state, by } = ab.encode(g);
+    {
+      const { state, by } = ab.encode(g, st.seat);
       if (JSON.stringify(state) !== JSON.stringify(st.state)) { fail(`${tag} step ${si}: state ${state} vs ${st.state}`); break; }
       const acts = [...by.keys()].sort((a, b) => a - b);
       if (JSON.stringify(acts) !== JSON.stringify(st.actions)) { fail(`${tag} step ${si}: actions ${acts} vs ${st.actions}`); break; }
-    } else {
+    }
+    if (st.seat !== 0) {
       if (st.opp === 'rule') {                 // the random bot's choice is just an rng draw: nothing to compare
         noise = st.noise.slice();
         const ordered = st.order.map(x => { const m = JSON.parse(x); return m[0] === 'play' ? ['play', m[1], m[2]] : [m[0]]; });   // Python's move order

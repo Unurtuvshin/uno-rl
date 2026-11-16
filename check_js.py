@@ -50,9 +50,9 @@ def play(rules, seed, opp1, start):
     while not g.done:
         legal = g.legal_moves(g.cur)
         rec = dict(seat=g.cur, legal=sorted(map(canon, legal)), order=list(map(canon, legal)))   # order: Python's set order, which the rule bot's noise follows
+        s, by = ab.encode(g, g.cur)                     # the state as seen by the seat to move, either seat
+        rec.update(state=list(s), actions=sorted(by))
         if g.cur == 0:
-            s, by = ab.encode(g)
-            rec.update(state=list(s), actions=sorted(by))
             mv = rng.choice(legal)                      # seat 0 plays randomly
         else:
             n0 = len(rng.randoms)
